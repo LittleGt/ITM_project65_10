@@ -32,6 +32,7 @@ import pickle
 import torch
 from diffusers import StableDiffusionPipeline
 from huggingface_hub import notebook_login
+from datetime import datetime
 
 from flask import Flask, request, abort, send_from_directory
 from werkzeug.middleware.proxy_fix import ProxyFix
@@ -108,9 +109,13 @@ def callback():
 
     return 'OK'
 
+print("Loading Model...")
+with open("./model/savedModel.pickle", "rb") as file:
+    loaded_model = pickle.load(file)
+print("*Model Loaded*")
 
 
-
+prompt_dict = {}
 @handler.add(MessageEvent, message=TextMessage)
 def handle_text_message(event):
 
@@ -125,8 +130,10 @@ def handle_text_message(event):
         
         str_time=getDate();
         
-        
-        image = model(prompt,width=512, height=512,num_inference_steps=150).images[0]  
+        try:
+            image = model(prompt,width=512, height=512,num_inference_steps=150).images[0]  
+        except RuntimeError as e:
+            return "Error: " + str(e)
 
         path = r'./static/output'
         if(not os.path.isdir(path)):
@@ -139,6 +146,7 @@ def handle_text_message(event):
         return(filename+".png")
     
     text = event.message.text
+    user_id = event.source.user_id
 
     if text == 'profile':
         if isinstance(event.source, SourceUser):
@@ -153,494 +161,133 @@ def handle_text_message(event):
             line_bot_api.reply_message(
                 event.reply_token,
                 TextSendMessage(text="Bot can't use profile API without user ID"))
-    elif text == 'emojis':
-        emojis = [
-            {
-                "index": 0,
-                "productId": "5ac1bfd5040ab15980c9b435",
-                "emojiId": "001"
-            },
-            {
-                "index": 13,
-                "productId": "5ac1bfd5040ab15980c9b435",
-                "emojiId": "002"
-            }
-        ]
-        text_message = TextSendMessage(text='$ LINE emoji $', emojis=emojis)
-        line_bot_api.reply_message(
-            event.reply_token, [
-                text_message
-            ]
-        )
-    elif( text.startswith('GEN:') or text.startswith('ขอภาพ:') ):  # Woking Here
+
+    elif( text.startswith('GEN:') or text.startswith('ขอภาพ:') or text.startswith('gen:') ):  # Woking Here
 
         
         prompt = text.split(':')[1]
+        if isEnglish(prompt):
+            prompt_dict[user_id] = prompt
+            # Send the "Generating..." response using the original reply token
+            line_bot_api.reply_message(
+                event.reply_token, [
+                TextSendMessage(text='Generating...')
+                ]
+            )
+            print("Incoming Prompt...")
 
-        
-        with open("./model/savedModel.pickle", "rb") as file:  ## Load Pipeline Model
-            loaded_model = pickle.load(file)
 
-        from datetime import datetime   ## เอา String วันที่,เวลา  มา   ไว้ใช้ตั้งชื่อไฟล์ไม่ให้ซ้ำ
-        url = request.url_root + '/static/output/' + generateIMG(prompt,loaded_model)
+            url_or_error = generateIMG(prompt, loaded_model)
+            if url_or_error.startswith("Error:"):
+                error_message = url_or_error
+                line_bot_api.reply_message(
+                    event.reply_token, [
+                        TextSendMessage(text=error_message)
+                    ]
+            )
+            else:
+                url = request.url_root + '/static/output/' + url_or_error
+                print(url)
+                # Send the generated image using a new reply token
+                new_token = event.reply_token
+                line_bot_api.push_message(
+                    event.source.user_id, [
+                    TextSendMessage(text='Prompt: '+prompt),
+                    ImageSendMessage(url, url)
+                    ]
+                )
+        else:
+            line_bot_api.reply_message(
+                event.reply_token, [
+                TextSendMessage(text='Please use only English character for the prompt')
+                ]
+            )
 
-        print(url)
-
-
-        app.logger.info("url=" + url)
-        line_bot_api.reply_message(
-            event.reply_token, [
-            TextSendMessage(text='Prompt: '+prompt),
-            ImageSendMessage(url, url)
-            ]
-        )
-    elif( text.startswith('ขอภาพ\"') or text.startswith('GEN\"') ):  # Woking Here
+    elif( text.startswith('ขอภาพ\"') or text.startswith('GEN\"') or text.startswith('gen\"') ):  # Woking Here
 
         
         prompt = text.split('\"')[1]
-        if(isEnglish(prompt)):
-        
-            with open("./model/savedModel.pickle", "rb") as file:  ## Load Pipeline Model
-                loaded_model = pickle.load(file)
-
-            from datetime import datetime   ## เอา String วันที่,เวลา  มา   ไว้ใช้ตั้งชื่อไฟล์ไม่ให้ซ้ำ
-            url = request.url_root + '/static/output/' + generateIMG(prompt,loaded_model)
-
-            print(url)
-
-
-            app.logger.info("url=" + url)
+        if isEnglish(prompt):
+            prompt_dict[user_id] = prompt
+            # Send the "Generating..." response using the original reply token
             line_bot_api.reply_message(
                 event.reply_token, [
+                TextSendMessage(text='Generating...')
+                ]
+            )
+            print("Incoming Prompt...")
+
+            url_or_error = generateIMG(prompt, loaded_model)
+            if url_or_error.startswith("Error:"):
+                error_message = url_or_error
+                line_bot_api.reply_message(
+                    event.reply_token, [
+                        TextSendMessage(text=error_message)
+                    ]
+            )
+            else:
+                url = request.url_root + '/static/output/' + url_or_error
+                print(url)
+                # Send the generated image using a new reply token
+                new_token = event.reply_token
+                line_bot_api.push_message(
+                    event.source.user_id, [
+                    TextSendMessage(text='Prompt: '+prompt),
+                    ImageSendMessage(url, url)
+                    ]
+                )
+            
+        else:
+            line_bot_api.reply_message(
+                event.reply_token, [
+                TextSendMessage(text='Please use only English character for the prompt')
+                ]
+            )
+    elif ( text == 'Repeat' or text == 'ขอภาพอีก' or text == 'อีกครั้ง' or text == 'r'):
+        if user_id in prompt_dict:
+            prompt = prompt_dict[user_id]
+            line_bot_api.reply_message(
+                event.reply_token, [
+                TextSendMessage(text='Generating...')
+                ]
+            )
+            print("Incoming Prompt... (Repeat)")
+
+            
+
+            url = request.url_root + '/static/output/' + generateIMG(prompt,loaded_model)
+            print(url)
+
+            # Send the generated image using a new reply token
+            new_token = event.reply_token
+            line_bot_api.push_message(
+                event.source.user_id, [
                 TextSendMessage(text='Prompt: '+prompt),
                 ImageSendMessage(url, url)
                 ]
             )
         else:
-            app.logger.info("url=" + url)
             line_bot_api.reply_message(
+                event.reply_token,
+                TextSendMessage(text="Sorry, you haven't entered a prompt yet.")
+            )
+    elif (text.find('ขอบคุณ') != -1) or (text.find('thank') != -1) or (text.find('Thank') != -1):
+        line_bot_api.reply_message(
+        event.reply_token,
+        StickerSendMessage(
+            package_id=11537,
+            sticker_id=52002735)
+    )
+    
+    elif (text == "test"):
+        line_bot_api.reply_message(
                 event.reply_token, [
-                TextSendMessage(text='Pls use only English as a prompt')
+                TextSendMessage(text='TEST')
                 ]
             )
         
-    elif text == 'quota':
-        quota = line_bot_api.get_message_quota()
-        line_bot_api.reply_message(
-            event.reply_token, [
-                TextSendMessage(text='type: ' + quota.type),
-                TextSendMessage(text='value: ' + str(quota.value))
-            ]
-        )
-    elif text == 'quota_consumption':
-        quota_consumption = line_bot_api.get_message_quota_consumption()
-        line_bot_api.reply_message(
-            event.reply_token, [
-                TextSendMessage(text='total usage: ' + str(quota_consumption.total_usage)),
-            ]
-        )
-    elif text == 'push':
-        line_bot_api.push_message(
-            event.source.user_id, [
-                TextSendMessage(text='PUSH!'),
-            ]
-        )
-    elif text == 'multicast':
-        line_bot_api.multicast(
-            [event.source.user_id], [
-                TextSendMessage(text='THIS IS A MULTICAST MESSAGE'),
-            ]
-        )
-    elif text == 'broadcast':
-        line_bot_api.broadcast(
-            [
-                TextSendMessage(text='THIS IS A BROADCAST MESSAGE'),
-            ]
-        )
-    elif text.startswith('broadcast '):  # broadcast 20190505
-        date = text.split(' ')[1]
-        print("Getting broadcast result: " + date)
-        result = line_bot_api.get_message_delivery_broadcast(date)
-        line_bot_api.reply_message(
-            event.reply_token, [
-                TextSendMessage(text='Number of sent broadcast messages: ' + date),
-                TextSendMessage(text='status: ' + str(result.status)),
-                TextSendMessage(text='success: ' + str(result.success)),
-            ]
-        )
-    elif text == 'bye':
-        if isinstance(event.source, SourceGroup):
-            line_bot_api.reply_message(
-                event.reply_token, TextSendMessage(text='Leaving group'))
-            line_bot_api.leave_group(event.source.group_id)
-        elif isinstance(event.source, SourceRoom):
-            line_bot_api.reply_message(
-                event.reply_token, TextSendMessage(text='Leaving group'))
-            line_bot_api.leave_room(event.source.room_id)
-        else:
-            line_bot_api.reply_message(
-                event.reply_token,
-                TextSendMessage(text="Bot can't leave from 1:1 chat"))
-    elif text == 'image':
-        url = request.url_root + '/static/logo.png'
-        app.logger.info("url=" + url)
-        line_bot_api.reply_message(
-            event.reply_token,
-            ImageSendMessage(url, url)
-        )
-    elif text == 'confirm':
-        confirm_template = ConfirmTemplate(text='Do it?', actions=[
-            MessageAction(label='Yes', text='Yes!'),
-            MessageAction(label='No', text='No!'),
-        ])
-        template_message = TemplateSendMessage(
-            alt_text='Confirm alt text', template=confirm_template)
-        line_bot_api.reply_message(event.reply_token, template_message)
-    elif text == 'buttons':
-        buttons_template = ButtonsTemplate(
-            title='My buttons sample', text='Hello, my buttons', actions=[
-                URIAction(label='Go to line.me', uri='https://line.me'),
-                PostbackAction(label='ping', data='ping'),
-                PostbackAction(label='ping with text', data='ping', text='ping'),
-                MessageAction(label='Translate Rice', text='米')
-            ])
-        template_message = TemplateSendMessage(
-            alt_text='Buttons alt text', template=buttons_template)
-        line_bot_api.reply_message(event.reply_token, template_message)
-    elif text == 'carousel':
-        carousel_template = CarouselTemplate(columns=[
-            CarouselColumn(text='hoge1', title='fuga1', actions=[
-                URIAction(label='Go to line.me', uri='https://line.me'),
-                PostbackAction(label='ping', data='ping')
-            ]),
-            CarouselColumn(text='hoge2', title='fuga2', actions=[
-                PostbackAction(label='ping with text', data='ping', text='ping'),
-                MessageAction(label='Translate Rice', text='米')
-            ]),
-        ])
-        template_message = TemplateSendMessage(
-            alt_text='Carousel alt text', template=carousel_template)
-        line_bot_api.reply_message(event.reply_token, template_message)
-    elif text == 'image_carousel':
-        image_carousel_template = ImageCarouselTemplate(columns=[
-            ImageCarouselColumn(image_url='https://via.placeholder.com/1024x1024',
-                                action=DatetimePickerAction(label='datetime',
-                                                            data='datetime_postback',
-                                                            mode='datetime')),
-            ImageCarouselColumn(image_url='https://via.placeholder.com/1024x1024',
-                                action=DatetimePickerAction(label='date',
-                                                            data='date_postback',
-                                                            mode='date'))
-        ])
-        template_message = TemplateSendMessage(
-            alt_text='ImageCarousel alt text', template=image_carousel_template)
-        line_bot_api.reply_message(event.reply_token, template_message)
-    elif text == 'imagemap':
-        pass
-    elif text == 'flex':
-        bubble = BubbleContainer(
-            direction='ltr',
-            hero=ImageComponent(
-                url='https://example.com/cafe.jpg',
-                size='full',
-                aspect_ratio='20:13',
-                aspect_mode='cover',
-                action=URIAction(uri='http://example.com', label='label')
-            ),
-            body=BoxComponent(
-                layout='vertical',
-                contents=[
-                    # title
-                    TextComponent(text='Brown Cafe', weight='bold', size='xl'),
-                    # review
-                    BoxComponent(
-                        layout='baseline',
-                        margin='md',
-                        contents=[
-                            IconComponent(size='sm', url='https://example.com/gold_star.png'),
-                            IconComponent(size='sm', url='https://example.com/grey_star.png'),
-                            IconComponent(size='sm', url='https://example.com/gold_star.png'),
-                            IconComponent(size='sm', url='https://example.com/gold_star.png'),
-                            IconComponent(size='sm', url='https://example.com/grey_star.png'),
-                            TextComponent(text='4.0', size='sm', color='#999999', margin='md',
-                                          flex=0)
-                        ]
-                    ),
-                    # info
-                    BoxComponent(
-                        layout='vertical',
-                        margin='lg',
-                        spacing='sm',
-                        contents=[
-                            BoxComponent(
-                                layout='baseline',
-                                spacing='sm',
-                                contents=[
-                                    TextComponent(
-                                        text='Place',
-                                        color='#aaaaaa',
-                                        size='sm',
-                                        flex=1
-                                    ),
-                                    TextComponent(
-                                        text='Shinjuku, Tokyo',
-                                        wrap=True,
-                                        color='#666666',
-                                        size='sm',
-                                        flex=5
-                                    )
-                                ],
-                            ),
-                            BoxComponent(
-                                layout='baseline',
-                                spacing='sm',
-                                contents=[
-                                    TextComponent(
-                                        text='Time',
-                                        color='#aaaaaa',
-                                        size='sm',
-                                        flex=1
-                                    ),
-                                    TextComponent(
-                                        text="10:00 - 23:00",
-                                        wrap=True,
-                                        color='#666666',
-                                        size='sm',
-                                        flex=5,
-                                    ),
-                                ],
-                            ),
-                        ],
-                    )
-                ],
-            ),
-            footer=BoxComponent(
-                layout='vertical',
-                spacing='sm',
-                contents=[
-                    # callAction
-                    ButtonComponent(
-                        style='link',
-                        height='sm',
-                        action=URIAction(label='CALL', uri='tel:000000'),
-                    ),
-                    # separator
-                    SeparatorComponent(),
-                    # websiteAction
-                    ButtonComponent(
-                        style='link',
-                        height='sm',
-                        action=URIAction(label='WEBSITE', uri="https://example.com")
-                    )
-                ]
-            ),
-        )
-        message = FlexSendMessage(alt_text="hello", contents=bubble)
-        line_bot_api.reply_message(
-            event.reply_token,
-            message
-        )
-    elif text == 'flex_update_1':
-        bubble_string = """
-        {
-          "type": "bubble",
-          "body": {
-            "type": "box",
-            "layout": "vertical",
-            "contents": [
-              {
-                "type": "image",
-                "url": "https://scdn.line-apps.com/n/channel_devcenter/img/flexsnapshot/clip/clip3.jpg",
-                "position": "relative",
-                "size": "full",
-                "aspectMode": "cover",
-                "aspectRatio": "1:1",
-                "gravity": "center"
-              },
-              {
-                "type": "box",
-                "layout": "horizontal",
-                "contents": [
-                  {
-                    "type": "box",
-                    "layout": "vertical",
-                    "contents": [
-                      {
-                        "type": "text",
-                        "text": "Brown Hotel",
-                        "weight": "bold",
-                        "size": "xl",
-                        "color": "#ffffff"
-                      },
-                      {
-                        "type": "box",
-                        "layout": "baseline",
-                        "margin": "md",
-                        "contents": [
-                          {
-                            "type": "icon",
-                            "size": "sm",
-                            "url": "https://scdn.line-apps.com/n/channel_devcenter/img/fx/review_gold_star_28.png"
-                          },
-                          {
-                            "type": "icon",
-                            "size": "sm",
-                            "url": "https://scdn.line-apps.com/n/channel_devcenter/img/fx/review_gold_star_28.png"
-                          },
-                          {
-                            "type": "icon",
-                            "size": "sm",
-                            "url": "https://scdn.line-apps.com/n/channel_devcenter/img/fx/review_gold_star_28.png"
-                          },
-                          {
-                            "type": "icon",
-                            "size": "sm",
-                            "url": "https://scdn.line-apps.com/n/channel_devcenter/img/fx/review_gold_star_28.png"
-                          },
-                          {
-                            "type": "icon",
-                            "size": "sm",
-                            "url": "https://scdn.line-apps.com/n/channel_devcenter/img/fx/review_gray_star_28.png"
-                          },
-                          {
-                            "type": "text",
-                            "text": "4.0",
-                            "size": "sm",
-                            "color": "#d6d6d6",
-                            "margin": "md",
-                            "flex": 0
-                          }
-                        ]
-                      }
-                    ]
-                  },
-                  {
-                    "type": "box",
-                    "layout": "vertical",
-                    "contents": [
-                      {
-                        "type": "text",
-                        "text": "¥62,000",
-                        "color": "#a9a9a9",
-                        "decoration": "line-through",
-                        "align": "end"
-                      },
-                      {
-                        "type": "text",
-                        "text": "¥42,000",
-                        "color": "#ebebeb",
-                        "size": "xl",
-                        "align": "end"
-                      }
-                    ]
-                  }
-                ],
-                "position": "absolute",
-                "offsetBottom": "0px",
-                "offsetStart": "0px",
-                "offsetEnd": "0px",
-                "backgroundColor": "#00000099",
-                "paddingAll": "20px"
-              },
-              {
-                "type": "box",
-                "layout": "vertical",
-                "contents": [
-                  {
-                    "type": "text",
-                    "text": "SALE",
-                    "color": "#ffffff"
-                  }
-                ],
-                "position": "absolute",
-                "backgroundColor": "#ff2600",
-                "cornerRadius": "20px",
-                "paddingAll": "5px",
-                "offsetTop": "10px",
-                "offsetEnd": "10px",
-                "paddingStart": "10px",
-                "paddingEnd": "10px"
-              }
-            ],
-            "paddingAll": "0px"
-          }
-        }
-        """
-        message = FlexSendMessage(alt_text="hello", contents=json.loads(bubble_string))
-        line_bot_api.reply_message(
-            event.reply_token,
-            message
-        )
-    elif text == 'quick_reply':
-        line_bot_api.reply_message(
-            event.reply_token,
-            TextSendMessage(
-                text='Quick reply',
-                quick_reply=QuickReply(
-                    items=[
-                        QuickReplyButton(
-                            action=PostbackAction(label="label1", data="data1")
-                        ),
-                        QuickReplyButton(
-                            action=MessageAction(label="label2", text="text2")
-                        ),
-                        QuickReplyButton(
-                            action=DatetimePickerAction(label="label3",
-                                                        data="data3",
-                                                        mode="date")
-                        ),
-                        QuickReplyButton(
-                            action=CameraAction(label="label4")
-                        ),
-                        QuickReplyButton(
-                            action=CameraRollAction(label="label5")
-                        ),
-                        QuickReplyButton(
-                            action=LocationAction(label="label6")
-                        ),
-                    ])))
-    elif text == 'link_token' and isinstance(event.source, SourceUser):
-        link_token_response = line_bot_api.issue_link_token(event.source.user_id)
-        line_bot_api.reply_message(
-            event.reply_token, [
-                TextSendMessage(text='link_token: ' + link_token_response.link_token)
-            ]
-        )
-    elif text == 'insight_message_delivery':
-        today = datetime.date.today().strftime("%Y%m%d")
-        response = line_bot_api.get_insight_message_delivery(today)
-        if response.status == 'ready':
-            messages = [
-                TextSendMessage(text='broadcast: ' + str(response.broadcast)),
-                TextSendMessage(text='targeting: ' + str(response.targeting)),
-            ]
-        else:
-            messages = [TextSendMessage(text='status: ' + response.status)]
-        line_bot_api.reply_message(event.reply_token, messages)
-    elif text == 'insight_followers':
-        today = datetime.date.today().strftime("%Y%m%d")
-        response = line_bot_api.get_insight_followers(today)
-        if response.status == 'ready':
-            messages = [
-                TextSendMessage(text='followers: ' + str(response.followers)),
-                TextSendMessage(text='targetedReaches: ' + str(response.targeted_reaches)),
-                TextSendMessage(text='blocks: ' + str(response.blocks)),
-            ]
-        else:
-            messages = [TextSendMessage(text='status: ' + response.status)]
-        line_bot_api.reply_message(event.reply_token, messages)
-    elif text == 'insight_demographic':
-        response = line_bot_api.get_insight_demographic()
-        if response.available:
-            messages = ["{gender}: {percentage}".format(gender=it.gender, percentage=it.percentage)
-                        for it in response.genders]
-        else:
-            messages = [TextSendMessage(text='available: false')]
-        line_bot_api.reply_message(event.reply_token, messages)
-    else:
-        line_bot_api.reply_message(
-            event.reply_token, TextSendMessage(text=event.message.text))
 
+        
 
 @handler.add(MessageEvent, message=LocationMessage)
 def handle_location_message(event):
@@ -655,74 +302,18 @@ def handle_location_message(event):
 
 @handler.add(MessageEvent, message=StickerMessage)
 def handle_sticker_message(event):
+    
+    print(event.message.package_id)
+    print(event.message.sticker_id)
+    
     line_bot_api.reply_message(
         event.reply_token,
         StickerSendMessage(
             package_id=event.message.package_id,
             sticker_id=event.message.sticker_id)
     )
-
-# model = joblib.load(r".\model\KNN.sav")
-# # Other Message Type
-# @handler.add(MessageEvent, message=(ImageMessage, VideoMessage, AudioMessage))
-# def handle_content_message(event):
-#     if isinstance(event.message, ImageMessage):
-#         ext = 'jpg'
-#     elif isinstance(event.message, VideoMessage):
-#         ext = 'mp4'
-#     elif isinstance(event.message, AudioMessage):
-#         ext = 'm4a'
-#     else:
-#         return
-
-#     message_content = line_bot_api.get_message_content(event.message.id)
-#     with tempfile.NamedTemporaryFile(dir=static_tmp_path, prefix=ext + '-', delete=False) as tf:
-#         for chunk in message_content.iter_content():
-#             tf.write(chunk)
-#         tempfile_path = tf.name
-
-#     dist_path = tempfile_path + '.' + ext
-#     dist_name = os.path.basename(dist_path)
-#     os.rename(tempfile_path, dist_path)
-#     dic = {0 : 'งูทับทาง (Bungarus)' ,  1 : 'งูกะปะ (Calloselasma)' ,  2 :  'งูเห่า (Naja)' ,   3 : 'งูจงอาง (Ophiophagus)' ,  4 : 'งูเขียวหางไหม้ (Trimeresurus)'}
-#     # load the image
     
-#     image = cv2.imread(dist_path)
-#     orig = image.copy()
-#     image2predict = Image.open(dist_path)
-
-#     # pre-process the image for classification
-#     image2predict = np.array(image2predict).reshape(1, -1)
-#     input_size = 3072
-#     resize = (input_size, input_size)
-#     image2predict = cv2.resize(image2predict,resize)
-
-#     # classify the input image
-#     predictOut = model.predict(image2predict)[0]
-
-#     # build the label
-#     label = "[  งูน้อยว่ามันคือ "+dic[predictOut]+"  ]"
-
-#     # draw the label on the image
-#     output = cv2.resize(orig, resize)
-#     cv2.putText(output, label, (10, 25),  cv2.FONT_HERSHEY_SIMPLEX,0.7, (0, 0, 0), 2)
-#     print(dist_path)
-#     xf = dist_path.split("\\")
-#     xf = xf[len(xf)-1]
-#     cv2.imwrite("static/output/"+xf, output)
-#     #time.sleep(3)
-#     url = request.url_root + '/static/output/'+xf
-#     app.logger.info("url=" + url)
-
-
-#     line_bot_api.reply_message(
-#         event.reply_token, [
-#             TextSendMessage(text='*งูกำลังคิด*'),
-#             #ImageSendMessage(url,url)
-#             TextSendMessage(text=label),
-#             TextSendMessage("ตรวจสอบข้อมูลด้วยนะ hiss~  งูน้อยอาจเดาไม่ถูกนะ~~ hiss~hiss~")
-#         ])
-
+    
 
 @handler.add(MessageEvent, message=FileMessage)
 def handle_file_message(event):
