@@ -139,8 +139,16 @@ def handle_text_message(event):
         if(not os.path.isdir(path)):
             os.mkdir(path)
 
+
         filename = prompt.replace(" ", "_")
-        filename = str_time+"-"+filename
+        if(filename.isalnum()):
+            filename = str_time+"-"+filename
+        else:
+            nfilename = ''
+            for c in filename:
+                if(c.isalnum() or c=='_'):
+                    nfilename = nfilename+c
+            filename = str_time+"-"+nfilename
         image.save(path+r"/"+filename+".png")
         
         return(filename+".png")
@@ -271,7 +279,7 @@ def handle_text_message(event):
                 event.reply_token,
                 TextSendMessage(text="Sorry, you haven't entered a prompt yet.")
             )
-    elif (text.find('ขอบคุณ') != -1) or (text.find('thank') != -1) or (text.find('Thank') != -1):
+    elif (text.find('ขอบคุณ') != -1) or (text.find('thank') != -1) or (text.find('Thank') != -1) or (text.find('thx') != -1):
         line_bot_api.reply_message(
         event.reply_token,
         StickerSendMessage(
@@ -283,6 +291,14 @@ def handle_text_message(event):
         line_bot_api.reply_message(
                 event.reply_token, [
                 TextSendMessage(text='TEST')
+                ]
+            )
+        
+    elif (text == "?"):
+        line_bot_api.reply_message(
+                event.reply_token, [
+                TextSendMessage(text='วิธีการใช้งาน(moon with tongue out)\nในการ generate ภาพมีรูปแบบดังนี้\n- ขอภาพ"(คำอธิบาย)" \n- gen:(คำอธิบาย)\n- ขอภาพอีก\n- Repeat'),
+                
                 ]
             )
         
