@@ -114,6 +114,8 @@ def callback():
 @handler.add(MessageEvent, message=TextMessage)
 def handle_text_message(event):
 
+    def isEnglish(s):
+        return s.isascii()
     def getDate():
         now = datetime.now()
         str_time = now.strftime("%dl%ml%y_%Hl%Ml%S")
@@ -170,7 +172,7 @@ def handle_text_message(event):
                 text_message
             ]
         )
-    elif text.startswith('GEN:'):  # Woking Here
+    elif( text.startswith('GEN:') or text.startswith('ขอภาพ:') ):  # Woking Here
 
         
         prompt = text.split(':')[1]
@@ -192,6 +194,35 @@ def handle_text_message(event):
             ImageSendMessage(url, url)
             ]
         )
+    elif( text.startswith('ขอภาพ\"') or text.startswith('GEN\"') ):  # Woking Here
+
+        
+        prompt = text.split('\"')[1]
+        if(isEnglish(prompt)):
+        
+            with open("./model/savedModel.pickle", "rb") as file:  ## Load Pipeline Model
+                loaded_model = pickle.load(file)
+
+            from datetime import datetime   ## เอา String วันที่,เวลา  มา   ไว้ใช้ตั้งชื่อไฟล์ไม่ให้ซ้ำ
+            url = request.url_root + '/static/output/' + generateIMG(prompt,loaded_model)
+
+            print(url)
+
+
+            app.logger.info("url=" + url)
+            line_bot_api.reply_message(
+                event.reply_token, [
+                TextSendMessage(text='Prompt: '+prompt),
+                ImageSendMessage(url, url)
+                ]
+            )
+        else:
+            app.logger.info("url=" + url)
+            line_bot_api.reply_message(
+                event.reply_token, [
+                TextSendMessage(text='Pls use only English as a prompt')
+                ]
+            )
         
     elif text == 'quota':
         quota = line_bot_api.get_message_quota()
