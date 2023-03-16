@@ -119,6 +119,9 @@ prompt_dict = {}
 @handler.add(MessageEvent, message=TextMessage)
 def handle_text_message(event):
 
+    text = event.message.text
+    user_id = event.source.user_id
+
     def isEnglish(s):
         return s.isascii()
     def getDate():
@@ -153,24 +156,9 @@ def handle_text_message(event):
         
         return(filename+".png")
     
-    text = event.message.text
-    user_id = event.source.user_id
+    
 
-    if text == 'profile':
-        if isinstance(event.source, SourceUser):
-            profile = line_bot_api.get_profile(event.source.user_id)
-            line_bot_api.reply_message(
-                event.reply_token, [
-                    TextSendMessage(text='Display name: ' + profile.display_name),
-                    TextSendMessage(text='Status message: ' + str(profile.status_message))
-                ]
-            )
-        else:
-            line_bot_api.reply_message(
-                event.reply_token,
-                TextSendMessage(text="Bot can't use profile API without user ID"))
-
-    elif( text.startswith('GEN:') or text.startswith('ขอภาพ:') or text.startswith('gen:') ):  # Woking Here
+    if( text.startswith('GEN:') or text.startswith('ขอภาพ:') or text.startswith('gen:') ):  # Woking Here
 
         
         prompt = text.split(':')[1]
@@ -287,7 +275,7 @@ def handle_text_message(event):
             sticker_id=52002735)
     )
     
-    elif (text == "test"):
+    elif (text.lower() == "test"):
         line_bot_api.reply_message(
                 event.reply_token, [
                 TextSendMessage(text='TEST')
@@ -301,10 +289,8 @@ def handle_text_message(event):
                 
                 ]
             )
-        
 
-        
-
+   
 @handler.add(MessageEvent, message=LocationMessage)
 def handle_location_message(event):
     line_bot_api.reply_message(
