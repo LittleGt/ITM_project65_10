@@ -289,6 +289,22 @@ def handle_text_message(event):
                 
                 ]
             )
+        
+    else :
+        emojis = [
+            {
+                "index": 41,
+                "productId": "5ac1bfd5040ab15980c9b435",
+                "emojiId": "004"
+            },
+        ]
+        text_message = TextSendMessage(text='Is that a typo?  I don\'t know what it is $' , emojis=emojis)
+
+        line_bot_api.reply_message(
+                event.reply_token, [
+                    text_message 
+                ]
+            )
 
    
 @handler.add(MessageEvent, message=LocationMessage)
