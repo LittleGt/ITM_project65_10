@@ -239,7 +239,7 @@ def handle_text_message(event):
                 TextSendMessage(text='Please use only English character for the prompt')
                 ]
             )
-    elif ( text == 'Repeat' or text == 'ขอภาพอีก' or text == 'อีกครั้ง' or text == 'r'):
+    elif ( text.lower() == 'Repeat' or text == 'ขอภาพอีก' or text == 'อีกครั้ง' or text == 'r'):
         if user_id in prompt_dict:
             prompt = prompt_dict[user_id]
             line_bot_api.reply_message(
@@ -285,7 +285,7 @@ def handle_text_message(event):
     elif (text == "?"):
         line_bot_api.reply_message(
                 event.reply_token, [
-                TextSendMessage(text='วิธีการใช้งาน(moon with tongue out)\nในการ generate ภาพมีรูปแบบดังนี้\n- ขอภาพ"(คำอธิบาย)" \n- gen:(คำอธิบาย)\n- ขอภาพอีก\n- Repeat'),
+                TextSendMessage(text='วิธีการใช้งาน\nในการ generate ภาพมีรูปแบบดังนี้\n- ขอภาพ"(คำอธิบาย)" \n- gen:(คำอธิบาย)\n- ขอภาพอีก\n- Repeat'),
                 
                 ]
             )
